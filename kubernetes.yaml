@@ -52,6 +52,8 @@ spec:
           value: "${CF_LB_NAME}"
         - name: "CF_LB_ZONE"
           value: "${CF_LB_ZONE}"
+        - name: "CF_LB_POOL_NAME"
+          value: "${CF_LB_POOL_NAME}"
         resources:
           requests:
             cpu: ${CPU_REQUEST}
