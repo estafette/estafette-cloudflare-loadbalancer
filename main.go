@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	stdlog "log"
 	"os"
 	"os/signal"
@@ -10,7 +9,6 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kingpin"
-	cloudflare "github.com/cloudflare/cloudflare-go"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -24,10 +22,11 @@ var (
 	goVersion = runtime.Version()
 
 	// flags
-	cloudflareAPIEmail         = kingpin.Flag("cloudflare-api-email", "The email address used to authenticate to the Cloudflare API.").Envar("CF_API_EMAIL").Required().String()
-	cloudflareAPIKey           = kingpin.Flag("cloudflare-api-key", "The api key used to authenticate to the Cloudflare API.").Envar("CF_API_KEY").Required().String()
-	cloudflareLoadbalancerName = kingpin.Flag("cloudflare-lb-name", "The name of the Cloudflare load balancer.").Envar("CF_LB_NAME").Required().String()
-	cloudflareLoadbalancerZone = kingpin.Flag("cloudflare-lb-zone", "The zone for the Cloudflare load balancer.").Envar("CF_LB_ZONE").Required().String()
+	cloudflareAPIEmail             = kingpin.Flag("cloudflare-api-email", "The email address used to authenticate to the Cloudflare API.").Envar("CF_API_EMAIL").Required().String()
+	cloudflareAPIKey               = kingpin.Flag("cloudflare-api-key", "The api key used to authenticate to the Cloudflare API.").Envar("CF_API_KEY").Required().String()
+	cloudflareLoadbalancerName     = kingpin.Flag("cloudflare-lb-name", "The name of the Cloudflare load balancer.").Envar("CF_LB_NAME").Required().String()
+	cloudflareLoadbalancerPoolName = kingpin.Flag("cloudflare-lb-name", "The name of the Cloudflare load balancer pool.").Envar("CF_LB_POOL_NAME").Required().String()
+	cloudflareLoadbalancerZone     = kingpin.Flag("cloudflare-lb-zone", "The zone for the Cloudflare load balancer.").Envar("CF_LB_ZONE").Required().String()
 )
 
 func main() {
@@ -62,53 +61,31 @@ func main() {
 	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
 	waitGroup := &sync.WaitGroup{}
 
-	// init cloudflare api client
-	cfClient, err := cloudflare.New(*cloudflareAPIKey, *cloudflareAPIEmail)
-
-	// get zone id
-	zones, err := cfClient.ListZones(*cloudflareLoadbalancerZone)
+	k8sAPIClient, err := NewKubernetesAPIClient()
 	if err != nil {
-		log.Fatal().Err(err).Msgf("Error retrieving zone %v", *cloudflareLoadbalancerZone)
+		log.Error().Err(err).Msg("Failed creating Kubernetes api client")
 	}
-	if len(zones) == 0 {
-		log.Fatal().Err(err).Msgf("Zero zones returned when retrieving zone %v", *cloudflareLoadbalancerZone)
-	}
-	zoneID := zones[0].ID
-	log.Debug().Msgf("Zone ID for zone %v is %v", *cloudflareLoadbalancerZone, zoneID)
 
-	// retrieve load balancers for zone
-	loadBalancers, err := cfClient.ListLoadBalancers(zoneID)
+	nodes, err := k8sAPIClient.GetHealthyNodes()
 	if err != nil {
-		log.Fatal().Err(err).Msgf("Error retrieving load balancers for zone id %v", zoneID)
-	}
-	log.Debug().Interface("loadBalancers", loadBalancers).Msgf("Retrieved load balancers for zone %v", zoneID)
-
-	// check if load balancer exists
-	lbName := fmt.Sprintf("%v.%v", *cloudflareLoadbalancerName, *cloudflareLoadbalancerZone)
-	loadBalancerExists := false
-	var loadBalancer cloudflare.LoadBalancer
-	if len(loadBalancers) > 0 {
-		for _, lb := range loadBalancers {
-			if lb.Name == lbName {
-				loadBalancerExists = true
-				loadBalancer = lb
-			}
-		}
+		log.Error().Err(err).Msg("Failed retrieving Kubernetes nodes")
 	}
 
-	if !loadBalancerExists {
-		// create loadbalancer
-		loadBalancer, err = cfClient.CreateLoadBalancer(zoneID, cloudflare.LoadBalancer{
-			Name:         lbName,
-			Description:  "Created by estafette-cloudflare-loadbalancer",
-			FallbackPool: "",
-		})
-		if err != nil {
-			log.Fatal().Err(err).Msgf("Error creating load balancer with name %v", lbName)
-		}
+	cfAPIClient, err := NewCloudflareAPIClient(*cloudflareAPIKey, *cloudflareAPIEmail)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed creating Cloudflare api client")
 	}
 
-	log.Debug().Interface("loadBalancer", loadBalancer).Msgf("Load balancer object for zone %v and name %v", zoneID, lbName)
+	pool, err := cfAPIClient.GetOrCreateLoadBalancerPool(*cloudflareLoadbalancerPoolName, nodes)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed creating Cloudflare load balancer pool")
+	}
+
+	loadBalancer, err := cfAPIClient.GetOrCreateLoadBalancer(*cloudflareLoadbalancerName, *cloudflareLoadbalancerZone, pool)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed creating load balancer")
+	}
+	log.Debug().Interface("loadBalancer", loadBalancer).Msg("Load balancer object")
 
 	// wait for sigterm
 	signalReceived := <-gracefulShutdown
