@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ericchiang/k8s"
+	"github.com/rs/zerolog/log"
 )
 
 type Node struct {
@@ -37,9 +38,11 @@ func NewKubernetesAPIClient() (KubernetesAPIClient, error) {
 
 func (cl *kubernetesAPIClientImpl) GetHealthyNodes() (nodes []Node, err error) {
 
-	labels := new(k8s.LabelSelector)
-	labels.Eq("cloud.google.com/gke-preemptible", "true")
-	kubeNodes, err := cl.kubeClient.CoreV1().ListNodes(context.Background(), labels.Selector())
+	kubeNodes, err := cl.kubeClient.CoreV1().ListNodes(context.Background())
+	if err != nil {
+		log.Error().Err(err).Msg("Retrieving Kubernetes nodes failed")
+		return
+	}
 
 	for _, node := range kubeNodes.Items {
 
