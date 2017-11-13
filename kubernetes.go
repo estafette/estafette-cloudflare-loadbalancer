@@ -38,9 +38,15 @@ func NewKubernetesAPIClient() (KubernetesAPIClient, error) {
 
 func (cl *kubernetesAPIClientImpl) GetHealthyNodes() (nodes []Node, err error) {
 
+	nodes = []Node{}
+
 	kubeNodes, err := cl.kubeClient.CoreV1().ListNodes(context.Background())
 	if err != nil {
 		log.Error().Err(err).Msg("Retrieving Kubernetes nodes failed")
+		return
+	}
+
+	if kubeNodes.Items == nil || len(kubeNodes.Items) == 0 {
 		return
 	}
 
