@@ -25,7 +25,7 @@ var (
 	cloudflareAPIEmail             = kingpin.Flag("cloudflare-api-email", "The email address used to authenticate to the Cloudflare API.").Envar("CF_API_EMAIL").Required().String()
 	cloudflareAPIKey               = kingpin.Flag("cloudflare-api-key", "The api key used to authenticate to the Cloudflare API.").Envar("CF_API_KEY").Required().String()
 	cloudflareLoadbalancerName     = kingpin.Flag("cloudflare-lb-name", "The name of the Cloudflare load balancer.").Envar("CF_LB_NAME").Required().String()
-	cloudflareLoadbalancerPoolName = kingpin.Flag("cloudflare-lb-name", "The name of the Cloudflare load balancer pool.").Envar("CF_LB_POOL_NAME").Required().String()
+	cloudflareLoadbalancerPoolName = kingpin.Flag("cloudflare-lb-pool-name", "The name of the Cloudflare load balancer pool.").Envar("CF_LB_POOL_NAME").Required().String()
 	cloudflareLoadbalancerZone     = kingpin.Flag("cloudflare-lb-zone", "The zone for the Cloudflare load balancer.").Envar("CF_LB_ZONE").Required().String()
 )
 
