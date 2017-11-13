@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	stdlog "log"
 	"os"
 	"os/signal"
@@ -54,7 +55,7 @@ func main() {
 		Str("revision", revision).
 		Str("buildDate", buildDate).
 		Str("goVersion", goVersion).
-		Msg("Starting estafette-cloudflare-laodbalancer...")
+		Msg("Starting estafette-cloudflare-loadbalancer...")
 
 	// define channel and wait group to gracefully shutdown the application
 	gracefulShutdown := make(chan os.Signal)
@@ -80,13 +81,15 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msgf("Error retrieving load balancers for zone id %v", zoneID)
 	}
+	log.Debug().Interface("loadBalancers", loadBalancers).Msgf("Retrieved load balancers for zone %v", zoneID)
 
 	// check if load balancer exists
+	lbName := fmt.Sprintf("%v.%v", *cloudflareLoadbalancerName, *cloudflareLoadbalancerZone)
 	loadBalancerExists := false
 	var loadBalancer cloudflare.LoadBalancer
 	if len(loadBalancers) > 0 {
 		for _, lb := range loadBalancers {
-			if loadBalancer.Name == *cloudflareLoadbalancerName {
+			if lb.Name == lbName {
 				loadBalancerExists = true
 				loadBalancer = lb
 			}
@@ -96,15 +99,16 @@ func main() {
 	if !loadBalancerExists {
 		// create loadbalancer
 		loadBalancer, err = cfClient.CreateLoadBalancer(zoneID, cloudflare.LoadBalancer{
-			Name:        *cloudflareLoadbalancerName,
-			Description: "Created by estafette-cloudflare-loadbalancer",
+			Name:         lbName,
+			Description:  "Created by estafette-cloudflare-loadbalancer",
+			FallbackPool: "",
 		})
 		if err != nil {
-			log.Fatal().Err(err).Msgf("Error creating load balancer with name %v", cloudflareLoadbalancerName)
+			log.Fatal().Err(err).Msgf("Error creating load balancer with name %v", lbName)
 		}
 	}
 
-	log.Debug().Interface("loadBalancer", loadBalancer).Msgf("Load balancer object for zone %v and name %v", zoneID, *cloudflareLoadbalancerName)
+	log.Debug().Interface("loadBalancer", loadBalancer).Msgf("Load balancer object for zone %v and name %v", zoneID, lbName)
 
 	// wait for sigterm
 	signalReceived := <-gracefulShutdown
