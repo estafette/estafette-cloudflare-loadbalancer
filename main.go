@@ -26,12 +26,13 @@ var (
 	goVersion = runtime.Version()
 
 	// flags
-	cloudflareAPIEmail             = kingpin.Flag("cloudflare-api-email", "The email address used to authenticate to the Cloudflare API.").Envar("CF_API_EMAIL").Required().String()
-	cloudflareAPIKey               = kingpin.Flag("cloudflare-api-key", "The api key used to authenticate to the Cloudflare API.").Envar("CF_API_KEY").Required().String()
-	cloudflareOrganizationID       = kingpin.Flag("cloudflare-organization-id", "The organization id used to get organization level items from the Cloudflare API.").Envar("CF_ORG_ID").Required().String()
-	cloudflareLoadbalancerName     = kingpin.Flag("cloudflare-lb-name", "The name of the Cloudflare load balancer.").Envar("CF_LB_NAME").Required().String()
-	cloudflareLoadbalancerPoolName = kingpin.Flag("cloudflare-lb-pool-name", "The name of the Cloudflare load balancer pool.").Envar("CF_LB_POOL_NAME").Required().String()
-	cloudflareLoadbalancerZone     = kingpin.Flag("cloudflare-lb-zone", "The zone for the Cloudflare load balancer.").Envar("CF_LB_ZONE").Required().String()
+	cloudflareAPIEmail                = kingpin.Flag("cloudflare-api-email", "The email address used to authenticate to the Cloudflare API.").Envar("CF_API_EMAIL").Required().String()
+	cloudflareAPIKey                  = kingpin.Flag("cloudflare-api-key", "The api key used to authenticate to the Cloudflare API.").Envar("CF_API_KEY").Required().String()
+	cloudflareOrganizationID          = kingpin.Flag("cloudflare-organization-id", "The organization id used to get organization level items from the Cloudflare API.").Envar("CF_ORG_ID").Required().String()
+	cloudflareLoadbalancerName        = kingpin.Flag("cloudflare-lb-name", "The name of the Cloudflare load balancer.").Envar("CF_LB_NAME").Required().String()
+	cloudflareLoadbalancerPoolName    = kingpin.Flag("cloudflare-lb-pool-name", "The name of the Cloudflare load balancer pool.").Envar("CF_LB_POOL_NAME").Required().String()
+	cloudflareLoadbalancerZone        = kingpin.Flag("cloudflare-lb-zone", "The zone for the Cloudflare load balancer.").Envar("CF_LB_ZONE").Required().String()
+	cloudflareLoadbalancerMonitorPath = kingpin.Flag("cloudflare-lb-monitor-path", "The path for the monitor the check the health of the Cloudflare load balancer pool.").Envar("CF_LB_MONITOR_PATH").Required().String()
 
 	// prometheus metrics listener
 	addr = flag.String("listen-address", ":9101", "The address to listen on for HTTP requests.")
@@ -62,7 +63,7 @@ func main() {
 	// set some default fields added to all logs
 	log.Logger = zerolog.New(os.Stdout).With().
 		Timestamp().
-		Str("app", "estafette-cloudflare-dns").
+		Str("app", "estafette-cloudflare-loadbalancer").
 		Str("version", version).
 		Logger()
 
@@ -111,7 +112,12 @@ func main() {
 		log.Error().Err(err).Msg("Failed creating Cloudflare api client")
 	}
 
-	pool, err := cfAPIClient.GetOrCreateLoadBalancerPool(*cloudflareLoadbalancerPoolName, nodes)
+	monitor, err := cfAPIClient.GetOrCreateLoadBalancerMonitor(*cloudflareLoadbalancerPoolName, *cloudflareLoadbalancerZone, *cloudflareLoadbalancerMonitorPath)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed creating Cloudflare load balancer monitor")
+	}
+
+	pool, err := cfAPIClient.GetOrCreateLoadBalancerPool(*cloudflareLoadbalancerPoolName, nodes, monitor)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed creating Cloudflare load balancer pool")
 	}

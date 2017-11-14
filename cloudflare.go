@@ -9,7 +9,8 @@ import (
 
 // CloudflareAPIClient handles communications with the Cloudflare API
 type CloudflareAPIClient interface {
-	GetOrCreateLoadBalancerPool(string, []Node) (cloudflare.LoadBalancerPool, error)
+	GetOrCreateLoadBalancerMonitor(string, string, string) (cloudflare.LoadBalancerMonitor, error)
+	GetOrCreateLoadBalancerPool(string, []Node, cloudflare.LoadBalancerMonitor) (cloudflare.LoadBalancerPool, error)
 	GetOrCreateLoadBalancer(string, string, cloudflare.LoadBalancerPool) (cloudflare.LoadBalancer, error)
 }
 
@@ -39,7 +40,7 @@ func NewCloudflareAPIClient(key, email, organizationID string) (CloudflareAPICli
 	}, nil
 }
 
-func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancerPool(poolName string, nodes []Node) (pool cloudflare.LoadBalancerPool, err error) {
+func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancerPool(poolName string, nodes []Node, monitor cloudflare.LoadBalancerMonitor) (pool cloudflare.LoadBalancerPool, err error) {
 
 	// retrieve load balancer pools
 	loadBalancerPools, err := cl.apiClient.ListLoadBalancerPools()
@@ -82,6 +83,7 @@ func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancerPool(poolName string, 
 			Name:    poolName,
 			Origins: origins,
 			Enabled: true,
+			Monitor: monitor.ID,
 		})
 		if err != nil {
 			log.Error().Err(err).Msgf("Error creating load balancer pool with name %v", poolName)
@@ -90,6 +92,7 @@ func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancerPool(poolName string, 
 	} else {
 		// update load balancer pool
 		pool.Origins = origins
+		pool.Monitor = monitor.ID
 		pool, err = cl.apiClient.ModifyLoadBalancerPool(pool)
 		if err != nil {
 			log.Error().Err(err).Msgf("Error updating load balancer pool with name %v", poolName)
@@ -160,6 +163,57 @@ func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancer(loadbalancerName, zon
 		}
 	}
 	log.Debug().Interface("loadBalancer", loadBalancer).Msgf("Load balancer object for zone %v and name %v", zoneID, lbName)
+
+	return
+}
+
+func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancerMonitor(poolName, zoneName, path string) (monitor cloudflare.LoadBalancerMonitor, err error) {
+
+	monitors, err := cl.apiClient.ListLoadBalancerMonitors()
+	if err != nil {
+		log.Error().Err(err).Msg("Error retrieving load balancer monitors")
+		return
+	}
+
+	// check if load balancer exists
+	monitorDescription := fmt.Sprintf("%v.%v%v", poolName, zoneName, path)
+	monitorExists := false
+	if len(monitors) > 0 {
+		for _, mon := range monitors {
+			if mon.Description == monitorDescription {
+				monitorExists = true
+				monitor = mon
+			}
+		}
+	}
+
+	if !monitorExists {
+		// create monitor
+		monitor, err = cl.apiClient.CreateLoadBalancerMonitor(cloudflare.LoadBalancerMonitor{
+			Type:            "https",
+			Description:     monitorDescription,
+			Method:          "GET",
+			Path:            path,
+			Timeout:         5,
+			Retries:         2,
+			Interval:        60,
+			ExpectedCodes:   "200",
+			FollowRedirects: false,
+			AllowInsecure:   true,
+		})
+		if err != nil {
+			log.Error().Err(err).Msgf("Failed creating monitor with description %v", monitorDescription)
+			return
+		}
+
+	} else {
+		// update monitor
+		// monitor, err = cl.apiClient.ModifyLoadBalancerMonitor(monitor)
+		// if err != nil {
+		// 	log.Error().Err(err).Msgf("Failed updating monitor with description %v", monitorDescription)
+		// 	return
+		// }
+	}
 
 	return
 }
