@@ -4,12 +4,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudflare/cloudflare-go"
+
 	"github.com/rs/zerolog/log"
 )
 
 // LoadBalancerController orchestrates the load balancer update process
 type LoadBalancerController interface {
-	InitLoadBalancer(string, string, string, string) error
+	Init(string, string, string, string) error
+	InitMonitor(string, string, string) error
+	InitPool(string) error
+	InitLoadBalancer(string, string) error
 	RefreshLoadBalancerOnChanges(string) error
 	RefreshLoadBalancerOnInterval(string, int) error
 }
@@ -18,7 +23,12 @@ type loadBalancerControllerImpl struct {
 	k8sAPIClient KubernetesAPIClient
 	cfAPIClient  CloudflareAPIClient
 	nodes        map[string]Node
-	waitGroup    *sync.WaitGroup
+
+	monitor      cloudflare.LoadBalancerMonitor
+	pool         cloudflare.LoadBalancerPool
+	loadbalancer cloudflare.LoadBalancer
+
+	waitGroup *sync.WaitGroup
 }
 
 // NewLoadBalancerController returns an instance of LoadBalancerController
@@ -45,7 +55,38 @@ func NewLoadBalancerController(key, email, organizationID string, waitGroup *syn
 	}, nil
 }
 
-func (ctl *loadBalancerControllerImpl) InitLoadBalancer(poolName, lbName, zoneName, monitorPath string) (err error) {
+func (ctl *loadBalancerControllerImpl) Init(poolName, lbName, zoneName, monitorPath string) (err error) {
+
+	err = ctl.InitMonitor(poolName, zoneName, monitorPath)
+	if err != nil {
+		return
+	}
+
+	err = ctl.InitPool(poolName)
+	if err != nil {
+		return
+	}
+
+	err = ctl.InitLoadBalancer(lbName, zoneName)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+func (ctl *loadBalancerControllerImpl) InitMonitor(poolName, zoneName, monitorPath string) (err error) {
+
+	ctl.monitor, err = ctl.cfAPIClient.GetOrCreateLoadBalancerMonitor(poolName, zoneName, monitorPath)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed creating Cloudflare load balancer monitor")
+		return
+	}
+
+	return
+}
+
+func (ctl *loadBalancerControllerImpl) InitPool(poolName string) (err error) {
 
 	nodes, err := ctl.k8sAPIClient.GetHealthyNodes()
 	if err != nil {
@@ -58,25 +99,24 @@ func (ctl *loadBalancerControllerImpl) InitLoadBalancer(poolName, lbName, zoneNa
 		ctl.nodes[node.Name] = node
 	}
 
-	monitor, err := ctl.cfAPIClient.GetOrCreateLoadBalancerMonitor(poolName, zoneName, monitorPath)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed creating Cloudflare load balancer monitor")
-		return
-	}
-
-	pool, err := ctl.cfAPIClient.GetOrCreateLoadBalancerPool(poolName, nodes, monitor)
+	ctl.pool, err = ctl.cfAPIClient.GetOrCreateLoadBalancerPool(poolName, nodes, ctl.monitor)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed creating Cloudflare load balancer pool")
 		return
 	}
 
-	loadBalancer, err := ctl.cfAPIClient.GetOrCreateLoadBalancer(lbName, zoneName, pool)
+	return
+}
+
+func (ctl *loadBalancerControllerImpl) InitLoadBalancer(lbName, zoneName string) (err error) {
+
+	ctl.loadbalancer, err = ctl.cfAPIClient.GetOrCreateLoadBalancer(lbName, zoneName, ctl.pool)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed creating load balancer")
 		return
 	}
 
-	log.Debug().Interface("loadBalancer", loadBalancer).Msg("Load balancer object")
+	log.Debug().Interface("loadBalancer", ctl.loadbalancer).Msg("Load balancer object")
 
 	return nil
 }
@@ -102,6 +142,11 @@ func (ctl *loadBalancerControllerImpl) RefreshLoadBalancerOnInterval(poolName st
 	go func(waitGroup *sync.WaitGroup) {
 		// loop indefinitely
 		for {
+			err = ctl.InitPool(poolName)
+			if err != nil {
+				log.Warn().Err(err).Msgf("Updating pool with name %v failed", poolName)
+			}
+
 			// sleep random time around 900 seconds
 			sleepTime := applyJitter(interval)
 			log.Info().Msgf("Sleeping for %v seconds...", sleepTime)

@@ -107,7 +107,7 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed creating load balancer controller")
 	}
 
-	err = lbController.InitLoadBalancer(*cloudflareLoadbalancerPoolName, *cloudflareLoadbalancerName, *cloudflareLoadbalancerZone, *cloudflareLoadbalancerMonitorPath)
+	err = lbController.Init(*cloudflareLoadbalancerPoolName, *cloudflareLoadbalancerName, *cloudflareLoadbalancerZone, *cloudflareLoadbalancerMonitorPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed initializing load balancer")
 	}
