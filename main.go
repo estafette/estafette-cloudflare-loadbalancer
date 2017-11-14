@@ -3,12 +3,14 @@ package main
 import (
 	"flag"
 	stdlog "log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/alecthomas/kingpin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -45,6 +47,9 @@ var (
 		},
 		[]string{"status"},
 	)
+
+	// seed random number
+	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 func init() {
@@ -97,7 +102,7 @@ func main() {
 		}
 	}()
 
-	lbController, err := NewLoadBalancerController(*cloudflareAPIKey, *cloudflareAPIEmail, *cloudflareOrganizationID)
+	lbController, err := NewLoadBalancerController(*cloudflareAPIKey, *cloudflareAPIEmail, *cloudflareOrganizationID, waitGroup)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed creating load balancer controller")
 	}
@@ -105,6 +110,16 @@ func main() {
 	err = lbController.InitLoadBalancer(*cloudflareLoadbalancerPoolName, *cloudflareLoadbalancerName, *cloudflareLoadbalancerZone, *cloudflareLoadbalancerMonitorPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed initializing load balancer")
+	}
+
+	err = lbController.RefreshLoadBalancerOnChanges(*cloudflareLoadbalancerPoolName)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed setting up refresh on changes")
+	}
+
+	err = lbController.RefreshLoadBalancerOnInterval(*cloudflareLoadbalancerPoolName, 900)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed setting up refresh on interval")
 	}
 
 	// wait for sigterm

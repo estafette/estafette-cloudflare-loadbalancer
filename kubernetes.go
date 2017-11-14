@@ -86,7 +86,16 @@ func (cl *kubernetesAPIClientImpl) GetHealthyNodes() (nodes []Node, err error) {
 			}
 		}
 
-		nodes = append(nodes, Node{Name: *node.Metadata.Name, ExternalIP: externalIP})
+		nodeReady := false
+		for _, condition := range node.Status.Conditions {
+			if *condition.Type == "Ready" && *condition.Status == "True" {
+				nodeReady = true
+			}
+		}
+
+		if !*node.Spec.Unschedulable && nodeReady {
+			nodes = append(nodes, Node{Name: *node.Metadata.Name, ExternalIP: externalIP})
+		}
 	}
 
 	return
