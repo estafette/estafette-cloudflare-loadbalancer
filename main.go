@@ -1,7 +1,9 @@
 package main
 
 import (
+	"flag"
 	stdlog "log"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
@@ -9,6 +11,8 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kingpin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -28,7 +32,24 @@ var (
 	cloudflareLoadbalancerName     = kingpin.Flag("cloudflare-lb-name", "The name of the Cloudflare load balancer.").Envar("CF_LB_NAME").Required().String()
 	cloudflareLoadbalancerPoolName = kingpin.Flag("cloudflare-lb-pool-name", "The name of the Cloudflare load balancer pool.").Envar("CF_LB_POOL_NAME").Required().String()
 	cloudflareLoadbalancerZone     = kingpin.Flag("cloudflare-lb-zone", "The zone for the Cloudflare load balancer.").Envar("CF_LB_ZONE").Required().String()
+
+	// prometheus metrics listener
+	addr = flag.String("listen-address", ":9101", "The address to listen on for HTTP requests.")
+
+	// define prometheus counter
+	loadBalancerTotals = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "estafette_cloudflare_loadbalancer_pools_totals",
+			Help: "Number of created/updated Cloudflare load balancer pools.",
+		},
+		[]string{"status"},
+	)
 )
+
+func init() {
+	// Metrics have to be registered to be exposed:
+	prometheus.MustRegister(loadBalancerTotals)
+}
 
 func main() {
 
@@ -61,6 +82,19 @@ func main() {
 	gracefulShutdown := make(chan os.Signal)
 	signal.Notify(gracefulShutdown, syscall.SIGTERM, syscall.SIGINT)
 	waitGroup := &sync.WaitGroup{}
+
+	// start prometheus
+	go func() {
+		log.Debug().
+			Str("port", *addr).
+			Msg("Serving Prometheus metrics...")
+
+		http.Handle("/metrics", promhttp.Handler())
+
+		if err := http.ListenAndServe(*addr, nil); err != nil {
+			log.Fatal().Err(err).Msg("Starting Prometheus listener failed")
+		}
+	}()
 
 	k8sAPIClient, err := NewKubernetesAPIClient()
 	if err != nil {
