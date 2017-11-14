@@ -97,36 +97,15 @@ func main() {
 		}
 	}()
 
-	k8sAPIClient, err := NewKubernetesAPIClient()
+	lbController, err := NewLoadBalancerController(*cloudflareAPIKey, *cloudflareAPIEmail, *cloudflareOrganizationID)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed creating Kubernetes api client")
+		log.Fatal().Err(err).Msg("Failed creating load balancer controller")
 	}
 
-	nodes, err := k8sAPIClient.GetHealthyNodes()
+	err = lbController.InitLoadBalancer(*cloudflareLoadbalancerPoolName, *cloudflareLoadbalancerName, *cloudflareLoadbalancerZone, *cloudflareLoadbalancerMonitorPath)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed retrieving Kubernetes nodes")
+		log.Fatal().Err(err).Msg("Failed initializing load balancer")
 	}
-
-	cfAPIClient, err := NewCloudflareAPIClient(*cloudflareAPIKey, *cloudflareAPIEmail, *cloudflareOrganizationID)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed creating Cloudflare api client")
-	}
-
-	monitor, err := cfAPIClient.GetOrCreateLoadBalancerMonitor(*cloudflareLoadbalancerPoolName, *cloudflareLoadbalancerZone, *cloudflareLoadbalancerMonitorPath)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed creating Cloudflare load balancer monitor")
-	}
-
-	pool, err := cfAPIClient.GetOrCreateLoadBalancerPool(*cloudflareLoadbalancerPoolName, nodes, monitor)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed creating Cloudflare load balancer pool")
-	}
-
-	loadBalancer, err := cfAPIClient.GetOrCreateLoadBalancer(*cloudflareLoadbalancerName, *cloudflareLoadbalancerZone, pool)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed creating load balancer")
-	}
-	log.Debug().Interface("loadBalancer", loadBalancer).Msg("Load balancer object")
 
 	// wait for sigterm
 	signalReceived := <-gracefulShutdown
