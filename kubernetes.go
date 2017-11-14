@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"os"
 
 	"github.com/ericchiang/k8s"
 	"github.com/rs/zerolog/log"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type Node struct {
@@ -24,8 +28,7 @@ type kubernetesAPIClientImpl struct {
 // NewKubernetesAPIClient returns an instance of KubernetesAPIClient
 func NewKubernetesAPIClient() (KubernetesAPIClient, error) {
 
-	// init cloudflare api client
-	kubeClient, err := k8s.NewInClusterClient()
+	kubeClient, err := getKubeClient()
 	if err != nil {
 		return nil, err
 	}
@@ -34,6 +37,30 @@ func NewKubernetesAPIClient() (KubernetesAPIClient, error) {
 	return &kubernetesAPIClientImpl{
 		kubeClient: kubeClient,
 	}, nil
+}
+
+func getKubeClient() (*k8s.Client, error) {
+
+	kubeConfigPath := os.Getenv("KUBECONFIG")
+	if kubeConfigPath != "" {
+
+		data, err := ioutil.ReadFile(kubeConfigPath)
+		if err != nil {
+			return nil, fmt.Errorf("Read kubeconfig error:\n%v", err)
+		}
+
+		// Unmarshal YAML into a Kubernetes config object.
+		var config k8s.Config
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return nil, fmt.Errorf("Unmarshal kubeconfig error:\n%v", err)
+		}
+
+		// fmt.Printf("%#v", config)
+		return k8s.NewClient(&config)
+	}
+
+	// init cloudflare api client
+	return k8s.NewInClusterClient()
 }
 
 func (cl *kubernetesAPIClientImpl) GetHealthyNodes() (nodes []Node, err error) {

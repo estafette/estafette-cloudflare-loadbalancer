@@ -7,3 +7,4 @@ govendor fetch github.com/stretchr/testify/mock@v1.1.4
 govendor fetch github.com/rs/zerolog/log@v1.3.0
 govendor fetch github.com/cloudflare/cloudflare-go@v0.8.4
 govendor fetch github.com/alecthomas/kingpin@v2.2.5
+govendor fetch gopkg.in/yaml.v2

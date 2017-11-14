@@ -453,6 +453,12 @@
 			"path": "golang.org/x/text/unicode/norm",
 			"revision": "88f656faf3f37f690df1a32515b479415e1a6769",
 			"revisionTime": "2017-10-26T07:52:28Z"
+		},
+		{
+			"checksumSHA1": "RDJpJQwkF012L6m/2BJizyOksNw=",
+			"path": "gopkg.in/yaml.v2",
+			"revision": "eb3733d160e74a9c7e442f435eb3bea458e1d19f",
+			"revisionTime": "2017-08-12T16:00:11Z"
 		}
 	],
 	"rootPath": "github.com/estafette/estafette-cloudflare-loadbalancer"

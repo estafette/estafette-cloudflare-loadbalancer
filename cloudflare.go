@@ -18,12 +18,19 @@ type cloudflareAPIClientImpl struct {
 }
 
 // NewCloudflareAPIClient returns an instance of CloudflareAPIClient
-func NewCloudflareAPIClient(key, email string) (CloudflareAPIClient, error) {
+func NewCloudflareAPIClient(key, email, organizationID string) (CloudflareAPIClient, error) {
 
 	// init cloudflare api client
 	apiClient, err := cloudflare.New(key, email)
 	if err != nil {
 		return nil, err
+	}
+
+	if organizationID != "" {
+		apiClient, err = cloudflare.New(key, email, cloudflare.UsingOrganization(organizationID))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// return instance of CloudflareAPIClient
@@ -62,9 +69,9 @@ func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancerPool(poolName string, 
 			Enabled: true,
 		})
 	}
+	log.Debug().Interface("nodes", nodes).Interface("origins", origins).Msg("Created origins from nodes")
 
 	if !loadBalancerPoolExists {
-
 		// create load balancer pool
 		pool, err = cl.apiClient.CreateLoadBalancerPool(cloudflare.LoadBalancerPool{
 			Name:    poolName,
@@ -76,6 +83,7 @@ func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancerPool(poolName string, 
 			return
 		}
 	} else {
+		// update load balancer pool
 		pool.Origins = origins
 		pool, err = cl.apiClient.ModifyLoadBalancerPool(pool)
 		if err != nil {
@@ -83,7 +91,6 @@ func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancerPool(poolName string, 
 			return
 		}
 	}
-
 	log.Debug().Interface("loadBalancerPool", pool).Msgf("Load balancer pool object for name %v", poolName)
 
 	return

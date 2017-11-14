@@ -24,6 +24,7 @@ var (
 	// flags
 	cloudflareAPIEmail             = kingpin.Flag("cloudflare-api-email", "The email address used to authenticate to the Cloudflare API.").Envar("CF_API_EMAIL").Required().String()
 	cloudflareAPIKey               = kingpin.Flag("cloudflare-api-key", "The api key used to authenticate to the Cloudflare API.").Envar("CF_API_KEY").Required().String()
+	cloudflareOrganizationID       = kingpin.Flag("cloudflare-organization-id", "The organization id used to get organization level items from the Cloudflare API.").Envar("CF_ORG_ID").Required().String()
 	cloudflareLoadbalancerName     = kingpin.Flag("cloudflare-lb-name", "The name of the Cloudflare load balancer.").Envar("CF_LB_NAME").Required().String()
 	cloudflareLoadbalancerPoolName = kingpin.Flag("cloudflare-lb-pool-name", "The name of the Cloudflare load balancer pool.").Envar("CF_LB_POOL_NAME").Required().String()
 	cloudflareLoadbalancerZone     = kingpin.Flag("cloudflare-lb-zone", "The zone for the Cloudflare load balancer.").Envar("CF_LB_ZONE").Required().String()
@@ -71,7 +72,7 @@ func main() {
 		log.Error().Err(err).Msg("Failed retrieving Kubernetes nodes")
 	}
 
-	cfAPIClient, err := NewCloudflareAPIClient(*cloudflareAPIKey, *cloudflareAPIEmail)
+	cfAPIClient, err := NewCloudflareAPIClient(*cloudflareAPIKey, *cloudflareAPIEmail, *cloudflareOrganizationID)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed creating Cloudflare api client")
 	}

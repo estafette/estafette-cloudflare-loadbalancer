@@ -48,6 +48,8 @@ spec:
           value: "${CF_API_EMAIL}"
         - name: "CF_API_KEY"
           value: "${CF_API_KEY}"
+        - name: "CF_ORG_ID"
+          value: "${CF_ORG_ID}"
         - name: "CF_LB_NAME"
           value: "${CF_LB_NAME}"
         - name: "CF_LB_ZONE"
