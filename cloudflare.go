@@ -60,6 +60,11 @@ func (cl *cloudflareAPIClientImpl) GetOrCreateLoadBalancerPool(poolName string, 
 		}
 	}
 
+	// truncate the nodes list to 5 nodes
+	if len(nodes) > 5 {
+		nodes = nodes[0:5]
+	}
+
 	// create list of origins from nodes
 	origins := []cloudflare.LoadBalancerOrigin{}
 	for _, node := range nodes {
