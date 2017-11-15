@@ -58,6 +58,8 @@ spec:
           value: "${CF_LB_POOL_NAME}"
         - name: "CF_LB_MONITOR_PATH"
           value: "${CF_LB_MONITOR_PATH}"
+        - name: "CF_LB_TYPE"
+          value: "${CF_LB_TYPE}"
         resources:
           requests:
             cpu: ${CPU_REQUEST}

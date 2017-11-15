@@ -12,17 +12,19 @@ import (
 // LoadBalancerController orchestrates the load balancer update process
 type LoadBalancerController interface {
 	Init(string, string, string, string) error
+	InitDns(string, string) error
 	InitMonitor(string, string, string) error
 	InitPool(string) error
 	InitLoadBalancer(string, string) error
 	RefreshLoadBalancerOnChanges(string) error
-	RefreshLoadBalancerOnInterval(string, int) error
+	RefreshLoadBalancerOnInterval(string, string, string, int) error
 }
 
 type loadBalancerControllerImpl struct {
 	k8sAPIClient KubernetesAPIClient
 	cfAPIClient  CloudflareAPIClient
 	nodes        map[string]Node
+	lbType       string
 
 	monitor      cloudflare.LoadBalancerMonitor
 	pool         cloudflare.LoadBalancerPool
@@ -32,7 +34,7 @@ type loadBalancerControllerImpl struct {
 }
 
 // NewLoadBalancerController returns an instance of LoadBalancerController
-func NewLoadBalancerController(key, email, organizationID string, waitGroup *sync.WaitGroup) (LoadBalancerController, error) {
+func NewLoadBalancerController(key, email, organizationID, lbType string, waitGroup *sync.WaitGroup) (LoadBalancerController, error) {
 
 	k8sAPIClient, err := NewKubernetesAPIClient()
 	if err != nil {
@@ -51,26 +53,45 @@ func NewLoadBalancerController(key, email, organizationID string, waitGroup *syn
 		k8sAPIClient: k8sAPIClient,
 		cfAPIClient:  cfAPIClient,
 		nodes:        make(map[string]Node),
+		lbType:       lbType,
 		waitGroup:    waitGroup,
 	}, nil
 }
 
 func (ctl *loadBalancerControllerImpl) Init(poolName, lbName, zoneName, monitorPath string) (err error) {
 
-	err = ctl.InitMonitor(poolName, zoneName, monitorPath)
-	if err != nil {
-		return
+	if ctl.lbType == "dns" {
+
+		err = ctl.InitDns(lbName, zoneName)
+		if err != nil {
+			return
+		}
+
+	} else if ctl.lbType == "lb" {
+
+		err = ctl.InitMonitor(poolName, zoneName, monitorPath)
+		if err != nil {
+			return
+		}
+
+		err = ctl.InitPool(poolName)
+		if err != nil {
+			return
+		}
+
+		err = ctl.InitLoadBalancer(lbName, zoneName)
+		if err != nil {
+			return
+		}
+
 	}
 
-	err = ctl.InitPool(poolName)
-	if err != nil {
-		return
-	}
+	return
+}
 
-	err = ctl.InitLoadBalancer(lbName, zoneName)
-	if err != nil {
-		return
-	}
+func (ctl *loadBalancerControllerImpl) InitDns(lbName, zoneName string) (err error) {
+
+	// todo set dns records <lbName>.<zoneName> for each node; remove ones that no longer point to an existing node
 
 	return
 }
@@ -137,14 +158,26 @@ func (ctl *loadBalancerControllerImpl) RefreshLoadBalancerOnChanges(poolName str
 	return nil
 }
 
-func (ctl *loadBalancerControllerImpl) RefreshLoadBalancerOnInterval(poolName string, interval int) (err error) {
+func (ctl *loadBalancerControllerImpl) RefreshLoadBalancerOnInterval(poolName, lbName, zoneName string, interval int) (err error) {
 
 	go func(waitGroup *sync.WaitGroup) {
 		// loop indefinitely
 		for {
-			err = ctl.InitPool(poolName)
-			if err != nil {
-				log.Warn().Err(err).Msgf("Updating pool with name %v failed", poolName)
+
+			if ctl.lbType == "dns" {
+
+				err = ctl.InitDns(lbName, zoneName)
+				if err != nil {
+					return
+				}
+
+			} else if ctl.lbType == "lb" {
+
+				err = ctl.InitPool(poolName)
+				if err != nil {
+					log.Warn().Err(err).Msgf("Updating pool with name %v failed", poolName)
+				}
+
 			}
 
 			// sleep random time around 900 seconds

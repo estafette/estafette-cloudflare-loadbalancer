@@ -35,6 +35,7 @@ var (
 	cloudflareLoadbalancerPoolName    = kingpin.Flag("cloudflare-lb-pool-name", "The name of the Cloudflare load balancer pool.").Envar("CF_LB_POOL_NAME").Required().String()
 	cloudflareLoadbalancerZone        = kingpin.Flag("cloudflare-lb-zone", "The zone for the Cloudflare load balancer.").Envar("CF_LB_ZONE").Required().String()
 	cloudflareLoadbalancerMonitorPath = kingpin.Flag("cloudflare-lb-monitor-path", "The path for the monitor the check the health of the Cloudflare load balancer pool.").Envar("CF_LB_MONITOR_PATH").Required().String()
+	cloudflareLoadbalancerType        = kingpin.Flag("cloudflare-lb-type", "Either use the Cloudflare Load Balancer by specifying 'lb' or poor mans load balancing with value 'dns'.").Envar("CF_LB_TYPE").Default("lb").String()
 
 	// prometheus metrics listener
 	addr = flag.String("listen-address", ":9101", "The address to listen on for HTTP requests.")
@@ -102,7 +103,7 @@ func main() {
 		}
 	}()
 
-	lbController, err := NewLoadBalancerController(*cloudflareAPIKey, *cloudflareAPIEmail, *cloudflareOrganizationID, waitGroup)
+	lbController, err := NewLoadBalancerController(*cloudflareAPIKey, *cloudflareAPIEmail, *cloudflareOrganizationID, *cloudflareLoadbalancerType, waitGroup)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed creating load balancer controller")
 	}
@@ -117,7 +118,7 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed setting up refresh on changes")
 	}
 
-	err = lbController.RefreshLoadBalancerOnInterval(*cloudflareLoadbalancerPoolName, 900)
+	err = lbController.RefreshLoadBalancerOnInterval(*cloudflareLoadbalancerPoolName, *cloudflareLoadbalancerName, *cloudflareLoadbalancerZone, 900)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed setting up refresh on interval")
 	}
